@@ -1,1 +1,205 @@
 @import "tailwindcss";
+
+@theme {
+  --font-display: "Unbounded", system-ui, sans-serif;
+  --font-body: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+
+  --color-ink: #0d1219;
+  --color-panel: #121a25;
+  --color-raised: #182231;
+  --color-hover: #1e2b3e;
+  --color-line: #223146;
+  --color-line2: #31455e;
+  --color-fg: #e7eef7;
+  --color-mut: #8da3ba;
+  --color-dim: #5c7189;
+
+  --color-amber: #f2b04e;
+  --color-amber2: #ffcf7d;
+  --color-mint: #55d6a0;
+  --color-coral: #ff7b72;
+  --color-sky: #6fb7ff;
+  --color-viol: #c9a6ff;
+
+  --animate-fade-up: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-toast-in: toast-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-drift-a: drift-a 26s ease-in-out infinite alternate;
+  --animate-drift-b: drift-b 32s ease-in-out infinite alternate;
+  --animate-blink-dot: blink-dot 2.4s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: -400px 0;
+  }
+  to {
+    background-position: 400px 0;
+  }
+}
+
+@keyframes drift-a {
+  from {
+    transform: translate3d(-4%, -2%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(5%, 4%, 0) scale(1.15);
+  }
+}
+
+@keyframes drift-b {
+  from {
+    transform: translate3d(3%, 3%, 0) scale(1.1);
+  }
+  to {
+    transform: translate3d(-5%, -4%, 0) scale(0.95);
+  }
+}
+
+@keyframes blink-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-ink);
+  color: var(--color-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(242, 176, 78, 0.28);
+  color: #fff3dd;
+}
+
+/* ---------- ambient background ---------- */
+.bg-stage {
+  background-image:
+    linear-gradient(rgba(111, 183, 255, 0.033) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(111, 183, 255, 0.033) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, black 30%, transparent 78%);
+}
+
+/* ---------- editor ---------- */
+.editor-textarea {
+  color: transparent;
+  caret-color: #f2b04e;
+  background: transparent;
+  resize: none;
+  outline: none;
+  border: none;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+}
+
+.editor-textarea::placeholder {
+  color: rgba(92, 113, 137, 0.7);
+}
+
+.editor-pre,
+.editor-textarea {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 20px;
+  tab-size: 2;
+}
+
+.editor-pre {
+  white-space: pre;
+  overflow: hidden;
+}
+
+.tk-comment {
+  color: #51637a;
+  font-style: italic;
+}
+.tk-string {
+  color: #9ece8f;
+}
+.tk-keyword {
+  color: #f2b04e;
+  font-weight: 700;
+}
+.tk-prop {
+  color: #6fb7ff;
+}
+.tk-punct {
+  color: #5d7189;
+}
+.tk-var {
+  color: #c9a6ff;
+}
+.tk-hex {
+  color: #55d6a0;
+}
+.tk-fn {
+  color: #8da3ba;
+}
+.tk-at {
+  color: #ff9d68;
+  font-weight: 500;
+}
+.tk-pseudo {
+  color: #6fb7ff;
+}
+
+/* ---------- scrollbars ---------- */
+.scroll-slim::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: #2b3c53;
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim::-webkit-scrollbar-thumb:hover {
+  background: #3c5373;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+.scroll-slim::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #182231 0%, #22314a 40%, #182231 80%);
+  background-size: 800px 100%;
+  animation: var(--animate-shimmer);
+}
