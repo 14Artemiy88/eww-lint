@@ -57,6 +57,7 @@ const normPath = (p: string) => p.replace(/^\.\//, "").trim();
 interface Toast {
   id: number;
   msg: string;
+  tone: "ok" | "warn";
 }
 
 export default function App() {
@@ -80,16 +81,17 @@ export default function App() {
   const mountedApis = useRef(new Map<string, EditorApi>());
   const fileInput = useRef<HTMLInputElement>(null);
   const yuckFileInput = useRef<HTMLInputElement>(null);
+  const dirInput = useRef<HTMLInputElement>(null);
   const firstRun = useRef(true);
   const toastTimer = useRef(0);
 
   const registerYuck = useCallback((api: EditorApi) => (yuckApi.current = api), []);
   const registerScss = useCallback((api: EditorApi) => (scssApi.current = api), []);
 
-  const showToast = useCallback((msg: string) => {
-    setToast({ id: Date.now(), msg });
+  const showToast = useCallback((msg: string, tone: "ok" | "warn" = "ok") => {
+    setToast({ id: Date.now(), msg, tone });
     clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 2300);
+    toastTimer.current = window.setTimeout(() => setToast(null), 2800);
   }, []);
 
   const runAnalysis = useCallback(
@@ -221,6 +223,82 @@ export default function App() {
         finish();
       };
       reader.onerror = () => finish();
+      reader.readAsText(f);
+    });
+  };
+
+  /* импорт всей папки с конфигом: автоопределение eww.yuck / eww.scss и вложенных файлов */
+  const onImportDir = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!list.length) return;
+
+    const folderName = (list[0].webkitRelativePath || "").split("/")[0] || "конфиг";
+    const yucks: { rel: string; text: string }[] = [];
+    const scssList: { rel: string; text: string }[] = [];
+    let skipped = 0;
+    let pending = list.length;
+
+    const finish = () => {
+      if (--pending > 0) return;
+
+      const withDepth = yucks.map((f) => ({ ...f, depth: f.rel.split("/").length }));
+      const root =
+        withDepth.filter((f) => f.rel.split("/").pop() === "eww.yuck").sort((a, b) => a.depth - b.depth)[0] ??
+        [...withDepth].sort((a, b) => a.depth - b.depth)[0];
+      if (!root) {
+        showToast(`В папке «${folderName}» не найдено .yuck-файлов`, "warn");
+        return;
+      }
+
+      const baseDir = root.rel.includes("/") ? root.rel.slice(0, root.rel.lastIndexOf("/")) : "";
+      const inSubtree = (rel: string) => (baseDir ? rel.startsWith(baseDir + "/") : true);
+
+      const mountedNext: MountedFile[] = [];
+      for (const f of yucks) {
+        if (f.rel === root.rel || !inSubtree(f.rel)) continue;
+        const p = baseDir ? f.rel.slice(baseDir.length + 1) : f.rel;
+        if (!mountedNext.some((m) => normPath(m.path) === normPath(p))) {
+          mountedNext.push({ id: newId(), path: p, content: f.text });
+        }
+      }
+
+      const scssCandidates = scssList.filter((f) => inSubtree(f.rel));
+      const scssRoot =
+        scssCandidates.find((f) => f.rel.split("/").pop() === "eww.scss") ?? scssCandidates[0] ?? null;
+
+      setYuck(root.text);
+      setScss(scssRoot?.text ?? "");
+      setMounted(mountedNext);
+      setTab("yuck");
+
+      const bits = [`yuck: ${yucks.length}`];
+      if (mountedNext.length) bits.push(`вложенных: ${mountedNext.length}`);
+      bits.push(scssRoot ? "eww.scss: найден" : "eww.scss: нет");
+      if (skipped) bits.push(`пропущено: ${skipped}`);
+      showToast(`Папка «${folderName}» — ${bits.join(", ")}`);
+      runAnalysis(root.text, scssRoot?.text ?? "", mountedNext, true);
+    };
+
+    list.forEach((f) => {
+      const rel = (f.webkitRelativePath || f.name).split("/").filter(Boolean).join("/");
+      const isYuck = /\.yuck$/i.test(f.name);
+      const isScss = /\.scss$/i.test(f.name);
+      if (!isYuck && !isScss) {
+        skipped++;
+        finish();
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result ?? "");
+        (isYuck ? yucks : scssList).push({ rel, text });
+        finish();
+      };
+      reader.onerror = () => {
+        skipped++;
+        finish();
+      };
       reader.readAsText(f);
     });
   };
@@ -438,6 +516,24 @@ export default function App() {
 
             <div className="ml-auto flex flex-wrap items-center gap-2">
               <input ref={fileInput} type="file" accept=".yuck,.scss,.txt" multiple className="hidden" onChange={onImport} />
+              <input
+                ref={dirInput}
+                type="file"
+                multiple
+                className="hidden"
+                {...({ webkitdirectory: "" } as Record<string, string>)}
+                onChange={onImportDir}
+              />
+              <button
+                onClick={() => dirInput.current?.click()}
+                title="Выбрать папку с конфигом (~/.config/eww) — все .yuck и .scss подхватятся автоматически"
+                className="flex items-center gap-1.5 rounded-lg border border-amber/50 bg-amber/10 px-3 py-2 text-[12px] font-bold text-amber transition-all duration-200 hover:bg-amber/20 active:scale-95"
+              >
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                </svg>
+                Папка
+              </button>
               <button
                 onClick={() => fileInput.current?.click()}
                 className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12px] font-semibold text-mut transition-all duration-200 hover:border-line2 hover:text-fg active:scale-95"
@@ -637,12 +733,22 @@ export default function App() {
       {toast && (
         <div
           key={toast.id}
-          className="animate-toast-in fixed right-5 bottom-5 z-50 flex items-center gap-2.5 rounded-xl border border-mint/40 bg-raised px-4 py-3 text-[12.5px] font-bold text-fg shadow-[0_12px_36px_rgba(0,0,0,0.5)]"
+          className={
+            "animate-toast-in fixed right-5 bottom-5 z-50 flex max-w-[min(92vw,480px)] items-center gap-2.5 rounded-xl border bg-raised px-4 py-3 text-[12.5px] font-bold text-fg shadow-[0_12px_36px_rgba(0,0,0,0.5)] " +
+            (toast.tone === "warn" ? "border-coral/50" : "border-mint/40")
+          }
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4 text-mint" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M5 13l4 4L19 7" />
-          </svg>
-          {toast.msg}
+          {toast.tone === "warn" ? (
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-coral" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 4 2.8 19.5h18.4L12 4z" />
+              <path d="M12 10v4.2M12 17.2v.1" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-mint" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          <span className="leading-snug">{toast.msg}</span>
         </div>
       )}
     </div>

@@ -199,7 +199,7 @@ export default function Diagnostics({ analysis, loading, filter, onFilter, onJum
               </svg>
               <div className="mt-3 font-display text-sm font-bold text-mut">Пока нечего проверять</div>
               <p className="mx-auto mt-2 max-w-[280px] text-[12.5px] leading-relaxed text-dim">
-                Вставьте содержимое eww.yuck и eww.scss в редакторы слева, импортируйте файлы или загрузите пример.
+                Выберите папку с конфигом кнопкой «Папка», вставьте eww.yuck и eww.scss вручную или загрузите пример.
               </p>
             </div>
           ) : all.length === 0 ? (
