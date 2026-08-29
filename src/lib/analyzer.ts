@@ -3,13 +3,20 @@ export type FileKind = "yuck" | "scss";
 
 export interface Diagnostic {
   id: string;
-  file: FileKind;
+  /** Путь файла: "eww.yuck", "eww.scss" или путь подключённого файла, например "src/_volumes.yuck" */
+  file: string;
   line: number;
   severity: Severity;
   tag: string;
   title: string;
   detail: string;
   fix?: string;
+}
+
+export interface MountedFile {
+  id: string;
+  path: string;
+  content: string;
 }
 
 export interface Stats {
@@ -19,6 +26,9 @@ export interface Stats {
   listens: number;
   vars: number;
   updatesPerMin: number;
+  files: number;
+  includesTotal: number;
+  includesResolved: number;
 }
 
 export interface Analysis {
@@ -26,6 +36,8 @@ export interface Analysis {
   score: number;
   grade: string;
   stats: Stats;
+  /** пути подключённых файлов, на которые есть include */
+  filesUsed: string[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -148,13 +160,28 @@ const LISTENABLE: { re: RegExp; title: string; detail: string; fix: string }[] =
   },
 ];
 
-const analyzeYuck = (src: string, diags: Diagnostic[]): Stats => {
-  const stats: Stats = { windows: 0, widgets: 0, polls: 0, listens: 0, vars: 0, updatesPerMin: 0 };
+const analyzeYuck = (
+  src: string,
+  diags: Diagnostic[],
+  filePath: string,
+  allYuckSrc: string
+): Stats => {
+  const stats: Stats = {
+    windows: 0,
+    widgets: 0,
+    polls: 0,
+    listens: 0,
+    vars: 0,
+    updatesPerMin: 0,
+    files: 0,
+    includesTotal: 0,
+    includesResolved: 0,
+  };
   if (!src.trim()) return stats;
 
   let uid = 0;
   const push = (d: Omit<Diagnostic, "id" | "file">) =>
-    diags.push({ id: `y${++uid}`, file: "yuck", ...d });
+    diags.push({ id: `y-${filePath}-${++uid}`, file: filePath, ...d });
 
   /* баланс скобок */
   let open = 0;
@@ -182,25 +209,7 @@ const analyzeYuck = (src: string, diags: Diagnostic[]): Stats => {
   }
 
   const blocks = findBlocks(src);
-
-  /* дубликаты имён */
-  const byName = new Map<string, Block[]>();
-  for (const b of blocks) {
-    if (!byName.has(b.name)) byName.set(b.name, []);
-    byName.get(b.name)!.push(b);
-  }
-  for (const [name, list] of byName) {
-    for (const b of list.slice(1)) {
-      push({
-        line: b.line,
-        severity: "error",
-        tag: "структура",
-        title: `Повторное определение «${name}»`,
-        detail:
-          "Два определения с одним именем — eww возьмёт последнее, но результат зависит от порядка файлов и include. Удалите дубликат и оставьте одно определение.",
-      });
-    }
-  }
+  /* дубликаты имён (в т.ч. между файлами) проверяются на уровне проекта */
 
   /* defpoll */
   const pollCommands = new Map<string, number>();
@@ -402,7 +411,8 @@ while true; do cat /sys/class/power_supply/BAT0/capacity; sleep 2; done`,
       if (b.kind === "defwidget") stats.widgets++;
       const bare = b.name.replace(/^\$/, "");
       const reName = new RegExp(`(^|[^A-Za-z0-9_-])${bare.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}(?![A-Za-z0-9_-])`, "g");
-      const total = (src.match(reName) ?? []).length;
+      /* ищем использования по всем файлам проекта, а не только в своём */
+      const total = (allYuckSrc.match(reName) ?? []).length;
       if (total <= 1) {
         push({
           line: b.line,
@@ -430,7 +440,7 @@ const analyzeScss = (src: string, diags: Diagnostic[]): void => {
   if (!src.trim()) return;
   let uid = 0;
   const push = (d: Omit<Diagnostic, "id" | "file">) =>
-    diags.push({ id: `s${++uid}`, file: "scss", ...d });
+    diags.push({ id: `s${++uid}`, file: "eww.scss", ...d });
 
   const lines = src.split("\n");
 
@@ -566,15 +576,172 @@ const analyzeScss = (src: string, diags: Diagnostic[]): void => {
 const SEVERITY_WEIGHT: Record<Severity, number> = { error: 10, warning: 5, hint: 2 };
 const SEVERITY_RANK: Record<Severity, number> = { error: 0, warning: 1, hint: 2 };
 
-export const analyze = (yuck: string, scss: string): Analysis => {
+const normalizePath = (p: string) => p.replace(/^\.\//, "").replace(/\/{2,}/g, "/").trim();
+const baseName = (p: string) => p.split("/").pop() ?? p;
+
+interface IncludeRef {
+  fromPath: string;
+  target: string;
+  line: number;
+  resolved: string | null;
+}
+
+export const analyze = (rootYuck: string, scss: string, mounted: MountedFile[] = []): Analysis => {
   const diagnostics: Diagnostic[] = [];
-  const stats = analyzeYuck(yuck, diagnostics);
+  let uid = 0;
+  const push = (d: Omit<Diagnostic, "id">) => diagnostics.push({ id: `p${++uid}`, ...d });
+
+  const files = [
+    { path: "eww.yuck", content: rootYuck },
+    ...mounted.map((m) => ({ path: normalizePath(m.path) || `файл-${m.id}.yuck`, content: m.content })),
+  ];
+  const allYuckSrc = files.map((f) => f.content).join("\n");
+
+  /* --- include: разбор, разрешение путей, циклы --- */
+  const includes: IncludeRef[] = [];
+  const resolve = (target: string, selfPath: string): string | null => {
+    const tn = normalizePath(target);
+    const cands = files.filter((x) => x.path !== selfPath);
+    return (
+      cands.find((x) => x.path === tn)?.path ??
+      cands.find((x) => x.path.endsWith("/" + tn))?.path ??
+      cands.find((x) => baseName(x.path) === baseName(tn))?.path ??
+      null
+    );
+  };
+
+  for (const f of files) {
+    const re = /\(\s*include\s+"([^"]+)"\s*\)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(f.content))) {
+      includes.push({ fromPath: f.path, target: m[1], line: lineOf(f.content, m.index), resolved: resolve(m[1], f.path) });
+    }
+  }
+
+  for (const inc of includes) {
+    if (!inc.resolved) {
+      push({
+        file: inc.fromPath,
+        line: inc.line,
+        severity: "warning",
+        tag: "include",
+        title: `include «${inc.target}» не найден среди подключённых файлов`,
+        detail:
+          "eww ищет путь относительно ~/.config/eww. Подключите файл кнопкой «+ файл» или «Вставить» — анализатор разберёт и его. Пока файл не подключён, все определения из него не учитываются.",
+        fix: `(include "${inc.target}")  ; убедитесь, что путь указан от корня ~/.config/eww`,
+      });
+    }
+  }
+
+  /* циклы и глубина цепочек include (DFS по графу файлов) */
+  const graph = new Map<string, IncludeRef[]>();
+  for (const inc of includes) {
+    if (!inc.resolved) continue;
+    if (!graph.has(inc.fromPath)) graph.set(inc.fromPath, []);
+    graph.get(inc.fromPath)!.push(inc);
+  }
+  const walk = (node: string, stack: string[]): void => {
+    for (const inc of graph.get(node) ?? []) {
+      const next = inc.resolved!;
+      const at = stack.indexOf(next);
+      if (at >= 0) {
+        push({
+          file: inc.fromPath,
+          line: inc.line,
+          severity: "error",
+          tag: "include",
+          title: "Цикл include: файл включает сам себя через цепочку",
+          detail: `Цепочка: ${[...stack.slice(at), next].join(" → ")}. eww зациклится при загрузке конфига — уберите один из include.`,
+          fix: `; удалите строку (include "${inc.target}") в одном из файлов цепочки`,
+        });
+        continue;
+      }
+      if (stack.length >= 5) {
+        push({
+          file: inc.fromPath,
+          line: inc.line,
+          severity: "hint",
+          tag: "include",
+          title: "Цепочка include глубже 5 уровней",
+          detail: "Слишком глубокая вложенность файлов усложняет поиск определений. Стоит уплощить структуру: 2–3 уровня обычно достаточно.",
+        });
+        continue;
+      }
+      walk(next, [...stack, next]);
+    }
+  };
+  walk("eww.yuck", ["eww.yuck"]);
+
+  /* подключённые, но ниоткуда не включённые файлы */
+  const referenced = new Set(includes.map((i) => i.resolved).filter(Boolean) as string[]);
+  for (const f of files) {
+    if (f.path === "eww.yuck") continue;
+    if (!referenced.has(f.path)) {
+      push({
+        file: f.path,
+        line: 1,
+        severity: "hint",
+        tag: "include",
+        title: "Файл подключён к анализу, но ни один include на него не ссылается",
+        detail: `Добавьте (include "${f.path}") в eww.yuck, иначе eww не увидит определения из этого файла. Если файл не нужен — отключите его (× на вкладке).`,
+        fix: `(include "${f.path}")`,
+      });
+    }
+  }
+
+  /* --- дубликаты определений между файлами --- */
+  const seen = new Map<string, { path: string; line: number }>();
+  for (const f of files) {
+    for (const b of findBlocks(f.content)) {
+      const key = `${b.kind}:${b.name}`;
+      const first = seen.get(key);
+      if (first) {
+        push({
+          file: f.path,
+          line: b.line,
+          severity: "error",
+          tag: "структура",
+          title: `Повторное определение «${b.name}»`,
+          detail: `Первое определение — ${first.path}, стр. ${first.line}. eww возьмёт то, что загрузится последним: при include порядок неочевиден. Оставьте одно определение.`,
+        });
+      } else {
+        seen.set(key, { path: f.path, line: b.line });
+      }
+    }
+  }
+
+  /* --- правила каждого yuck-файла --- */
+  const stats: Stats = {
+    windows: 0,
+    widgets: 0,
+    polls: 0,
+    listens: 0,
+    vars: 0,
+    updatesPerMin: 0,
+    files: files.length,
+    includesTotal: includes.length,
+    includesResolved: includes.filter((i) => i.resolved).length,
+  };
+  for (const f of files) {
+    const st = analyzeYuck(f.content, diagnostics, f.path, allYuckSrc);
+    stats.windows += st.windows;
+    stats.widgets += st.widgets;
+    stats.polls += st.polls;
+    stats.listens += st.listens;
+    stats.vars += st.vars;
+    stats.updatesPerMin += st.updatesPerMin;
+  }
+
   analyzeScss(scss, diagnostics);
 
+  /* сортировка: серьёзность → порядок файлов (корень, подключённые, scss) → строка */
+  const order = new Map<string, number>(files.map((f, i) => [f.path, i]));
+  order.set("eww.scss", files.length);
   diagnostics.sort(
     (a, b) =>
       SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-      (a.file === b.file ? a.line - b.line : a.file === "yuck" ? -1 : 1)
+      (order.get(a.file) ?? 99) - (order.get(b.file) ?? 99) ||
+      a.line - b.line
   );
 
   const penalty = diagnostics.reduce((s, d) => s + SEVERITY_WEIGHT[d.severity], 0);
@@ -582,5 +749,5 @@ export const analyze = (yuck: string, scss: string): Analysis => {
   const grade =
     score >= 85 ? "отлично" : score >= 65 ? "хорошо" : score >= 40 ? "средне" : "требует работы";
 
-  return { diagnostics, score, grade, stats };
+  return { diagnostics, score, grade, stats, filesUsed: [...referenced] };
 };

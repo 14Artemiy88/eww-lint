@@ -128,6 +128,35 @@ export default function Diagnostics({ analysis, loading, filter, onFilter, onJum
           </div>
         )}
 
+        {/* include-сводка */}
+        {analysis && !loading && analysis.stats.includesTotal > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border border-line/70 bg-ink/50 px-2.5 py-1.5 text-[11px] text-mut">
+            <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-amber" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+              <path d="M10 13.5 8.5 15l1.5 1.5M14 13.5l1.5 1.5L14 16.5" />
+            </svg>
+            <span>
+              файлов: <b className="font-mono text-fg">{analysis.stats.files}</b>
+            </span>
+            <span className="text-dim">·</span>
+            <span>
+              include:{" "}
+              <b
+                className="font-mono"
+                style={{
+                  color:
+                    analysis.stats.includesResolved === analysis.stats.includesTotal ? "#55d6a0" : "#f2b04e",
+                }}
+              >
+                {analysis.stats.includesResolved}/{analysis.stats.includesTotal}
+              </b>
+            </span>
+            {analysis.stats.includesResolved < analysis.stats.includesTotal && (
+              <span className="font-semibold text-amber">— есть неразрешённые</span>
+            )}
+          </div>
+        )}
+
         {/* filters */}
         <div className="mt-3 flex gap-1.5">
           {chips.map((c) => {
@@ -214,8 +243,14 @@ export default function Diagnostics({ analysis, loading, filter, onFilter, onJum
                       <span className="rounded bg-ink/70 px-1.5 py-0.5 text-[9.5px] font-bold tracking-wider text-mut uppercase">
                         {d.tag}
                       </span>
-                      <span className="ml-auto flex items-center gap-1 font-mono text-[10.5px] text-dim">
-                        <span className={"rounded px-1.5 py-0.5 font-semibold " + (d.file === "yuck" ? "bg-amber/12 text-amber" : "bg-viol/12 text-viol")}>
+                      <span className="ml-auto flex min-w-0 items-center gap-1 font-mono text-[10.5px] text-dim">
+                        <span
+                          title={d.file}
+                          className={
+                            "max-w-[140px] truncate rounded px-1.5 py-0.5 font-semibold " +
+                            (d.file.endsWith(".scss") ? "bg-viol/12 text-viol" : "bg-amber/12 text-amber")
+                          }
+                        >
                           {d.file}
                         </span>
                         <span className="rounded bg-ink/70 px-1.5 py-0.5 transition-colors group-hover:text-fg">
@@ -245,7 +280,7 @@ export default function Diagnostics({ analysis, loading, filter, onFilter, onJum
 
       {/* footer */}
       <div className="border-t border-line px-4 py-2.5 text-[10.5px] text-dim">
-        Клик по находке ведёт к строке кода · 26 правил статического анализа yuck + scss
+        Клик по находке ведёт к строке кода · 31 правило анализа yuck, scss и include-графов
       </div>
     </div>
   );

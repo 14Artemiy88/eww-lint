@@ -3,11 +3,17 @@ import CodeEditor, { type EditorApi } from "./components/CodeEditor";
 import HelpModal from "./components/HelpModal";
 import ScoreDial from "./components/ScoreDial";
 import Diagnostics, { type Filter } from "./components/Diagnostics";
-import { analyze, type Analysis, type Diagnostic, type FileKind } from "./lib/analyzer";
-import { SAMPLE_SCSS, SAMPLE_YUCK } from "./lib/sample";
+import { analyze, type Analysis, type Diagnostic, type FileKind, type MountedFile } from "./lib/analyzer";
+import { SAMPLE_SCSS, SAMPLE_VOLUMES, SAMPLE_YUCK } from "./lib/sample";
 
 const LS_YUCK = "ewwlint.v1.yuck";
 const LS_SCSS = "ewwlint.v1.scss";
+const LS_MOUNTED = "ewwlint.v1.mounted";
+const LS_TAB = "ewwlint.v1.tab";
+
+const DEFAULT_MOUNTED: MountedFile[] = [
+  { id: "sample-volumes", path: "src/_volumes.yuck", content: SAMPLE_VOLUMES },
+];
 
 const load = (key: string, fallback: string) => {
   try {
@@ -26,6 +32,28 @@ const save = (key: string, val: string) => {
   }
 };
 
+const loadJSON = <T,>(key: string, fallback: T): T => {
+  try {
+    const v = localStorage.getItem(key);
+    if (v === null) return fallback;
+    const parsed = JSON.parse(v);
+    return Array.isArray(fallback) ? (Array.isArray(parsed) ? (parsed as T) : fallback) : (parsed as T);
+  } catch {
+    return fallback;
+  }
+};
+
+const saveJSON = (key: string, val: unknown) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(val));
+  } catch {
+    /* приватный режим — молча пропускаем */
+  }
+};
+
+const newId = () => `m-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+const normPath = (p: string) => p.replace(/^\.\//, "").trim();
+
 interface Toast {
   id: number;
   msg: string;
@@ -34,17 +62,24 @@ interface Toast {
 export default function App() {
   const [yuck, setYuck] = useState(() => load(LS_YUCK, SAMPLE_YUCK));
   const [scss, setScss] = useState(() => load(LS_SCSS, SAMPLE_SCSS));
-  const [tab, setTab] = useState<FileKind>("yuck");
+  const [mounted, setMounted] = useState<MountedFile[]>(() => loadJSON(LS_MOUNTED, DEFAULT_MOUNTED));
+  const [tab, setTab] = useState<string>(() => load(LS_TAB, "yuck"));
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [loading, setLoading] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [toast, setToast] = useState<Toast | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pastePath, setPastePath] = useState("");
+  const [pasteContent, setPasteContent] = useState("");
+  const [pasteError, setPasteError] = useState("");
 
   const yuckApi = useRef<EditorApi | null>(null);
   const scssApi = useRef<EditorApi | null>(null);
+  const mountedApis = useRef(new Map<string, EditorApi>());
   const fileInput = useRef<HTMLInputElement>(null);
+  const yuckFileInput = useRef<HTMLInputElement>(null);
   const firstRun = useRef(true);
   const toastTimer = useRef(0);
 
@@ -58,11 +93,11 @@ export default function App() {
   }, []);
 
   const runAnalysis = useCallback(
-    (y: string, s: string, withSkeleton: boolean) => {
+    (y: string, s: string, m: MountedFile[], withSkeleton: boolean) => {
       if (withSkeleton) setLoading(true);
       window.setTimeout(
         () => {
-          setAnalysis(analyze(y, s));
+          setAnalysis(analyze(y, s, m));
           if (withSkeleton) setLoading(false);
         },
         withSkeleton ? 450 : 120
@@ -73,8 +108,14 @@ export default function App() {
 
   /* первый запуск */
   useEffect(() => {
-    const t = window.setTimeout(() => runAnalysis(yuck, scss, true), 400);
+    const t = window.setTimeout(() => runAnalysis(yuck, scss, mounted, true), 400);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* если сохранённая вкладка исчезла — возвращаемся к корню */
+  useEffect(() => {
+    if (tab.startsWith("m:") && !mounted.some((m) => `m:${m.id}` === tab)) setTab("yuck");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -84,38 +125,51 @@ export default function App() {
       firstRun.current = false;
       return;
     }
-    const t = window.setTimeout(() => runAnalysis(yuck, scss, false), 900);
+    const t = window.setTimeout(() => runAnalysis(yuck, scss, mounted, false), 900);
     return () => clearTimeout(t);
-  }, [yuck, scss, runAnalysis]);
+  }, [yuck, scss, mounted, runAnalysis]);
 
   /* автосохранение */
   useEffect(() => {
     save(LS_YUCK, yuck);
     save(LS_SCSS, scss);
+    saveJSON(LS_MOUNTED, mounted);
+    save(LS_TAB, tab);
     setSavedAt(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
-  }, [yuck, scss]);
+  }, [yuck, scss, mounted, tab]);
 
   /* Ctrl+Enter — проверить */
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        runAnalysis(yuck, scss, true);
+        runAnalysis(yuck, scss, mounted, true);
       }
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [yuck, scss, runAnalysis]);
+  }, [yuck, scss, mounted, runAnalysis]);
 
   const onJump = useCallback(
     (d: Diagnostic) => {
-      setTab(d.file);
+      const mf = mounted.find((m) => normPath(m.path) === d.file || m.path === d.file);
+      if (d.file === "eww.yuck") setTab("yuck");
+      else if (d.file === "eww.scss") setTab("scss");
+      else if (mf) setTab(`m:${mf.id}`);
+      else return;
       window.setTimeout(() => {
-        const api = d.file === "yuck" ? yuckApi.current : scssApi.current;
+        const api =
+          d.file === "eww.yuck"
+            ? yuckApi.current
+            : d.file === "eww.scss"
+              ? scssApi.current
+              : mf
+                ? mountedApis.current.get(mf.id) ?? null
+                : null;
         api?.jumpToLine(d.line);
       }, 70);
     },
-    []
+    [mounted]
   );
 
   const onCopy = useCallback(
@@ -137,32 +191,75 @@ export default function App() {
   );
 
   const onImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result ?? "");
-      const isScss = /\.scss$/i.test(f.name) || /^\s*(\*|\.|#|\$|@)/.test(text.slice(0, 200));
-      if (isScss) {
-        setScss(text);
-        setTab("scss");
-      } else {
-        setYuck(text);
-        setTab("yuck");
-      }
-      showToast(`Импортирован ${f.name}`);
-      runAnalysis(isScss ? yuck : text, isScss ? text : scss, true);
-    };
-    reader.readAsText(f);
+    const list = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (!list.length) return;
+    let scssText: string | null = null;
+    const added: MountedFile[] = [];
+    let pending = list.length;
+    const finish = () => {
+      if (--pending > 0) return;
+      const nextMounted = [...mounted.filter((m) => !added.some((a) => normPath(a.path) === normPath(m.path))), ...added];
+      const nextScss = scssText ?? scss;
+      if (scssText !== null) {
+        setScss(scssText);
+        setTab("scss");
+      }
+      if (added.length) {
+        setMounted(nextMounted);
+        setTab(`m:${added[added.length - 1].id}`);
+      }
+      showToast(added.length ? `Подключено файлов: ${added.length}` : "Импортирован eww.scss");
+      runAnalysis(yuck, nextScss, nextMounted, true);
+    };
+    list.forEach((f) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result ?? "");
+        if (/\.scss$/i.test(f.name)) scssText = text;
+        else added.push({ id: newId(), path: f.name, content: text });
+        finish();
+      };
+      reader.onerror = () => finish();
+      reader.readAsText(f);
+    });
   };
 
-  const issueCount = (file: FileKind, sev?: "error") =>
-    (analysis?.diagnostics ?? []).filter((d) => d.file === file && (!sev || d.severity === sev)).length;
+  const addPastedFile = () => {
+    const p = pastePath.trim();
+    if (!p) {
+      setPasteError("Укажите путь — как в (include \"…\")");
+      return;
+    }
+    if (!pasteContent.trim()) {
+      setPasteError("Содержимое файла пустое");
+      return;
+    }
+    const nf: MountedFile = { id: newId(), path: p, content: pasteContent };
+    const next = [...mounted.filter((m) => normPath(m.path) !== normPath(p)), nf];
+    setMounted(next);
+    setTab(`m:${nf.id}`);
+    setPasteOpen(false);
+    setPastePath("");
+    setPasteContent("");
+    setPasteError("");
+    showToast(`Подключён ${p}`);
+    runAnalysis(yuck, scss, next, true);
+  };
 
-  const tabBadge = (file: FileKind) => {
-    const err = issueCount(file, "error");
-    const all = issueCount(file);
+  const removeMounted = (id: string) => {
+    const target = mounted.find((m) => m.id === id);
+    setMounted((prev) => prev.filter((m) => m.id !== id));
+    if (tab === `m:${id}`) setTab("yuck");
+    if (target) showToast(`Отключён ${target.path}`);
+  };
+
+  const issueCount = (fileLabel: string, sev?: "error") =>
+    (analysis?.diagnostics ?? []).filter((d) => d.file === fileLabel && (!sev || d.severity === sev)).length;
+
+  const tabBadge = (fileLabel: string) => {
+    const err = issueCount(fileLabel, "error");
+    const all = issueCount(fileLabel);
     if (!analysis || loading) return null;
     const color = err > 0 ? "#ff7b72" : all > 0 ? "#f2b04e" : "#55d6a0";
     return (
@@ -175,9 +272,18 @@ export default function App() {
     );
   };
 
-  const activeValue = tab === "yuck" ? yuck : scss;
+  const activeMounted = tab.startsWith("m:") ? mounted.find((m) => `m:${m.id}` === tab) ?? null : null;
+  const activeValue = tab === "yuck" ? yuck : tab === "scss" ? scss : activeMounted?.content ?? "";
+  const activeLabel = tab === "yuck" ? "eww.yuck" : tab === "scss" ? "eww.scss" : activeMounted?.path ?? "—";
   const activeLines = activeValue.split("\n").length;
-  const inputsEmpty = yuck.trim() === "" && scss.trim() === "";
+  const inputsEmpty = yuck.trim() === "" && scss.trim() === "" && mounted.every((m) => m.content.trim() === "");
+
+  const onActiveChange = (v: string) => {
+    if (tab === "yuck") setYuck(v);
+    else if (tab === "scss") setScss(v);
+    else if (activeMounted)
+      setMounted((prev) => prev.map((m) => (m.id === activeMounted.id ? { ...m, content: v } : m)));
+  };
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden xl:h-screen">
@@ -257,13 +363,81 @@ export default function App() {
                 >
                   <span className={f === "yuck" ? "text-amber" : "text-viol"}>{f === "yuck" ? "( )" : "{ }"}</span>
                   {f === "yuck" ? "eww.yuck" : "eww.scss"}
-                  {tabBadge(f)}
+                  {tabBadge(f === "yuck" ? "eww.yuck" : "eww.scss")}
                 </button>
               ))}
             </div>
 
+            {/* вложенные файлы (include) */}
+            <div className="flex w-full flex-wrap items-center gap-1.5 xl:w-auto xl:flex-1 xl:basis-full">
+              <span className="mr-0.5 text-[9.5px] font-bold tracking-[0.14em] text-dim uppercase">include</span>
+              {mounted.map((m) => {
+                const label = normPath(m.path);
+                const isActive = tab === `m:${m.id}`;
+                const used = analysis?.filesUsed.includes(label) || analysis?.filesUsed.includes(m.path);
+                return (
+                  <div
+                    key={m.id}
+                    className={
+                      "group/chip flex items-center gap-1 rounded-full border py-1 pr-1 pl-2.5 font-mono text-[11px] transition-all duration-200 " +
+                      (isActive
+                        ? "border-amber/60 bg-amber/12 text-amber"
+                        : "border-line bg-panel text-mut hover:border-line2 hover:text-fg")
+                    }
+                  >
+                    <button
+                      onClick={() => setTab(`m:${m.id}`)}
+                      className="flex max-w-[190px] items-center gap-1.5"
+                      title={used ? `${m.path} — есть include на этот файл` : `${m.path} — ни один include не ссылается`}
+                    >
+                      <span
+                        className={"h-1.5 w-1.5 shrink-0 rounded-full " + (used ? "bg-mint" : "bg-dim")}
+                      />
+                      <span className="truncate">{m.path}</span>
+                    </button>
+                    {tabBadge(label)}
+                    <button
+                      onClick={() => removeMounted(m.id)}
+                      aria-label={`Отключить ${m.path}`}
+                      title="Отключить файл"
+                      className="rounded-full p-0.5 text-dim transition-all duration-150 hover:bg-coral/15 hover:text-coral active:scale-90"
+                    >
+                      <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                        <path d="M6 6l12 12M18 6L6 18" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+              <input ref={yuckFileInput} type="file" accept=".yuck" multiple className="hidden" onChange={onImport} />
+              <button
+                onClick={() => yuckFileInput.current?.click()}
+                title="Импортировать .yuck-файлы из ~/.config/eww"
+                className="flex items-center gap-1 rounded-full border border-dashed border-line2 px-2.5 py-1 font-mono text-[11px] font-semibold text-dim transition-all duration-200 hover:border-amber/50 hover:text-amber active:scale-95"
+              >
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+                файл
+              </button>
+              <button
+                onClick={() => {
+                  setPasteOpen(true);
+                  setPasteError("");
+                }}
+                title="Вставить содержимое вложенного файла вручную"
+                className="flex items-center gap-1 rounded-full border border-dashed border-line2 px-2.5 py-1 font-mono text-[11px] font-semibold text-dim transition-all duration-200 hover:border-amber/50 hover:text-amber active:scale-95"
+              >
+                <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="8" y="3" width="8" height="4" rx="1" />
+                  <path d="M16 5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2" />
+                </svg>
+                вставить
+              </button>
+            </div>
+
             <div className="ml-auto flex flex-wrap items-center gap-2">
-              <input ref={fileInput} type="file" accept=".yuck,.scss,.txt" className="hidden" onChange={onImport} />
+              <input ref={fileInput} type="file" accept=".yuck,.scss,.txt" multiple className="hidden" onChange={onImport} />
               <button
                 onClick={() => fileInput.current?.click()}
                 className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12px] font-semibold text-mut transition-all duration-200 hover:border-line2 hover:text-fg active:scale-95"
@@ -278,6 +452,7 @@ export default function App() {
                 onClick={() => {
                   setYuck(SAMPLE_YUCK);
                   setScss(SAMPLE_SCSS);
+                  setMounted(DEFAULT_MOUNTED);
                   setTab("yuck");
                   showToast("Загружен пример конфига");
                 }}
@@ -293,6 +468,8 @@ export default function App() {
                 onClick={() => {
                   setYuck("");
                   setScss("");
+                  setMounted([]);
+                  setTab("yuck");
                   showToast("Редакторы очищены");
                 }}
                 className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[12px] font-semibold text-mut transition-all duration-200 hover:border-coral/50 hover:text-coral active:scale-95"
@@ -303,7 +480,7 @@ export default function App() {
                 Очистить
               </button>
               <button
-                onClick={() => runAnalysis(yuck, scss, true)}
+                onClick={() => runAnalysis(yuck, scss, mounted, true)}
                 disabled={loading}
                 className="flex items-center gap-2 rounded-lg bg-amber px-4 py-2 text-[12px] font-extrabold text-ink shadow-[0_4px_18px_rgba(242,176,78,0.25)] transition-all duration-200 hover:bg-amber2 active:scale-95 disabled:opacity-60"
               >
@@ -330,17 +507,31 @@ export default function App() {
           >
             <CodeEditor
               value={activeValue}
-              onChange={tab === "yuck" ? setYuck : setScss}
-              lang={tab}
-              placeholder={tab === "yuck" ? "; вставьте сюда содержимое eww.yuck…" : "/* вставьте сюда содержимое eww.scss… */"}
-              registerApi={tab === "yuck" ? registerYuck : registerScss}
+              onChange={onActiveChange}
+              lang={tab === "scss" ? "scss" : "yuck"}
+              placeholder={
+                tab === "scss"
+                  ? "/* вставьте сюда содержимое eww.scss… */"
+                  : "; вставьте сюда содержимое yuck-файла…"
+              }
+              registerApi={
+                tab === "yuck"
+                  ? registerYuck
+                  : tab === "scss"
+                    ? registerScss
+                    : (api) => {
+                        if (activeMounted) mountedApis.current.set(activeMounted.id, api);
+                      }
+              }
             />
             {/* status bar */}
             <div className="flex items-center gap-4 border-t border-line bg-panel px-4 py-2 font-mono text-[10.5px] text-dim">
-              <span className="font-semibold text-mut">{tab === "yuck" ? "yuck" : "scss"}</span>
+              <span className="max-w-[220px] truncate font-semibold text-mut" title={activeLabel}>
+                {activeLabel}
+              </span>
               <span>{activeLines} строк</span>
               <span>{activeValue.length} симв.</span>
-              {tab === "yuck" && analysis && !loading && (
+              {tab !== "scss" && analysis && !loading && (
                 <span>
                   defpoll: <span className="text-amber">{analysis.stats.polls}</span> · deflisten:{" "}
                   <span className="text-mint">{analysis.stats.listens}</span>
@@ -375,6 +566,60 @@ export default function App() {
           />
         </aside>
       </main>
+
+      {/* paste nested file */}
+      {pasteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-ink/70 backdrop-blur-[2px]" onClick={() => setPasteOpen(false)} />
+          <div className="animate-fade-up relative w-full max-w-lg rounded-xl border border-line bg-panel p-5 shadow-[0_24px_70px_rgba(0,0,0,0.55)]">
+            <div className="flex items-center justify-between">
+              <h3 className="font-display text-[13px] font-bold text-fg">Вложенный файл</h3>
+              <button
+                onClick={() => setPasteOpen(false)}
+                aria-label="Закрыть"
+                className="rounded p-1 text-dim transition-colors hover:text-fg"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-dim">
+              Путь относительно <span className="font-mono text-mut">~/.config/eww</span> — ровно как в{" "}
+              <span className="font-mono text-mut">(include "…")</span>. Анализатор проверит файл и сопоставит его с include.
+            </p>
+            <input
+              autoFocus
+              value={pastePath}
+              onChange={(e) => setPastePath(e.target.value)}
+              placeholder="src/_sidebar.yuck"
+              className="mt-3 w-full rounded-lg border border-line bg-ink px-3 py-2 font-mono text-[12px] text-fg outline-none transition-colors focus:border-amber/60"
+            />
+            <textarea
+              value={pasteContent}
+              onChange={(e) => setPasteContent(e.target.value)}
+              rows={9}
+              placeholder="; содержимое файла…"
+              className="scroll-slim mt-2 w-full resize-none rounded-lg border border-line bg-ink px-3 py-2 font-mono text-[12px] leading-[18px] whitespace-pre text-fg outline-none transition-colors focus:border-amber/60"
+            />
+            {pasteError && <p className="mt-1.5 text-[11px] font-bold text-coral">{pasteError}</p>}
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                onClick={() => setPasteOpen(false)}
+                className="rounded-lg border border-line px-3.5 py-2 text-[12px] font-semibold text-mut transition-all duration-200 hover:border-line2 hover:text-fg active:scale-95"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={addPastedFile}
+                className="rounded-lg bg-amber px-4 py-2 text-[12px] font-extrabold text-ink shadow-[0_4px_18px_rgba(242,176,78,0.25)] transition-all duration-200 hover:bg-amber2 active:scale-95"
+              >
+                Подключить файл
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* help */}
       <HelpModal

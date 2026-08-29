@@ -6,6 +6,11 @@ export const SAMPLE_YUCK = String.raw`;; ── ~/.config/eww/eww.yuck ───
 
 (defvar accent "#f2b04e")
 
+;; --- вложенные файлы -------------------------------------------
+
+(include "src/_volumes.yuck")
+(include "src/_music.yuck")   ; такого файла нет — анализатор покажет warning
+
 ;; --- модули данных ---------------------------------------------
 
 (defpoll volume :interval "0.2s"
@@ -85,6 +90,19 @@ export const SAMPLE_YUCK = String.raw`;; ── ~/.config/eww/eww.yuck ───
   :stacking "fg"
   (box :class "dash"
     (label :text weather :class "weather")))
+`;
+
+export const SAMPLE_VOLUMES = String.raw`;; src/_volumes.yuck — модуль громкости, подключается из eww.yuck
+;; через (include "src/_volumes.yuck")
+
+(defwidget volume-icon-box
+  (label :text volume-icon :class "vol-icon"))
+
+(defwidget volume-slider
+  (box :orientation "h" :space-evenly false :spacing 6 :class "volume"
+    (volume-icon-box)
+    (scale :min 0 :max 100 :value volume
+      :onchange "pamixer --set-volume {}")))
 `;
 
 export const SAMPLE_SCSS = String.raw`/* ── ~/.config/eww/eww.scss ───────────────────────────────── */

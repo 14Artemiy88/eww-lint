@@ -10,21 +10,27 @@ const STEPS: { n: string; title: string; text: string; hint?: string }[] = [
   {
     n: "01",
     title: "Вставьте конфиг",
-    text: "Откройте ~/.config/eww/eww.yuck и ~/.config/eww/eww.scss, скопируйте содержимое в редакторы слева. Или жмите «Импорт» и выберите файлы — они попадут на нужные вкладки.",
+    text: "Откройте ~/.config/eww/eww.yuck и ~/.config/eww/eww.scss, скопируйте содержимое в редакторы слева. Или жмите «Импорт» и выберите файлы (можно несколько) — они попадут на нужные вкладки.",
     hint: "cat ~/.config/eww/eww.yuck | wl-copy",
   },
   {
     n: "02",
+    title: "Подключите вложенные файлы",
+    text: "Если конфиг разбит на части — (include \"src/_volumes.yuck\") — подключите их кнопками «+ файл» (импорт .yuck) или «вставить» (путь + содержимое). Анализатор проверит все файлы, разрешит пути include, найдёт циклы и дубли определений между файлами.",
+    hint: "ls ~/.config/eww/src/*.yuck",
+  },
+  {
+    n: "03",
     title: "Проверка идёт сама",
     text: "Анализ перезапускается автоматически через секунду после правок (или Ctrl+Enter вручную). Ничего никуда не отправляется — всё считается в браузере.",
   },
   {
-    n: "03",
+    n: "04",
     title: "Разберите находки",
     text: "Справа — список проблем по серьёзности: ошибки, предупреждения, советы. Клик по номеру строки переносит прямо к проблемному месту в редакторе и подсвечивает его.",
   },
   {
-    n: "04",
+    n: "05",
     title: "Примените фиксы",
     text: "У каждой находки есть готовый исправленный фрагмент — копируйте кнопкой «фикс» и вставляйте в свой конфиг. Индекс оптимизации и счётчик «обн/мин» покажут эффект.",
   },
@@ -61,7 +67,8 @@ export default function HelpModal({ open, onClose, onTrySample }: Props) {
               Как пользоваться <span className="text-amber">eww·lint</span>
             </h2>
             <p className="mt-1 text-[13px] leading-relaxed text-mut">
-              Четыре шага от «вот мой конфиг» до «вот что в нём тормозит и как исправить».
+              Пять шагов от «вот мой конфиг» до «вот что в нём тормозит и как исправить» — включая вложенные файлы
+              из include.
             </p>
           </div>
           <button
@@ -104,6 +111,7 @@ export default function HelpModal({ open, onClose, onTrySample }: Props) {
               <li className="flex gap-2"><span className="text-amber">•</span>поллинг вместо событий (pactl subscribe, playerctl -F, udevadm)</li>
               <li className="flex gap-2"><span className="text-amber">•</span>busy-loop в deflisten: while true без sleep сжигает ядро</li>
               <li className="flex gap-2"><span className="text-sky">•</span>тяжёлые стили: blur, большие тени, вложенность &gt; 4, hover без transition</li>
+              <li className="flex gap-2"><span className="text-viol">•</span>неразрешённые include, циклы include, дубли определений между файлами</li>
             </ul>
           </div>
         </div>
