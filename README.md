@@ -22,10 +22,12 @@ eww·lint находит эти паттерны автоматически, о�
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
+npm run dev        # http://localhost:3000
 npm run build      # прод-сборка в dist/
 npm run typecheck  # проверка типов без сборки
 ```
+
+Дев-сервер закреплён на порту **3000** (`server.strictPort: true` в `vite.config.js`) — если порт занят, Vite не подберёт соседний, а сразу упадёт с ошибкой.
 
 Стек: React 18 + TypeScript, Vite 6, Tailwind CSS 4. Без бэкенда и внешних API.
 
