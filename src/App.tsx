@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeEditor, { type EditorApi } from "./components/CodeEditor";
+import HelpModal from "./components/HelpModal";
 import ScoreDial from "./components/ScoreDial";
 import Diagnostics, { type Filter } from "./components/Diagnostics";
 import { analyze, type Analysis, type Diagnostic, type FileKind } from "./lib/analyzer";
@@ -39,6 +40,7 @@ export default function App() {
   const [filter, setFilter] = useState<Filter>("all");
   const [toast, setToast] = useState<Toast | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const yuckApi = useRef<EditorApi | null>(null);
   const scssApi = useRef<EditorApi | null>(null);
@@ -216,8 +218,22 @@ export default function App() {
             </div>
           </div>
 
-          <div className="ml-auto hidden md:block">
-            <ScoreDial score={loading ? null : analysis?.score ?? null} grade={analysis?.grade ?? ""} />
+          <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={() => setHelpOpen(true)}
+              title="Как пользоваться"
+              aria-label="Как пользоваться"
+              className="group flex h-9 w-9 items-center justify-center rounded-lg border border-line text-dim transition-all duration-200 hover:border-amber/60 hover:text-amber active:scale-90"
+            >
+              <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="9.2" />
+                <path d="M9.4 9.3a2.7 2.7 0 1 1 3.9 2.6c-.8.4-1.3 1-1.3 1.9v.4" />
+                <circle cx="12" cy="17.2" r="0.4" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+            <div className="hidden md:block">
+              <ScoreDial score={loading ? null : analysis?.score ?? null} grade={analysis?.grade ?? ""} />
+            </div>
           </div>
         </div>
         <div className="h-px w-full bg-gradient-to-r from-transparent via-amber/50 to-transparent" />
@@ -359,6 +375,18 @@ export default function App() {
           />
         </aside>
       </main>
+
+      {/* help */}
+      <HelpModal
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+        onTrySample={() => {
+          setYuck(SAMPLE_YUCK);
+          setScss(SAMPLE_SCSS);
+          setTab("yuck");
+          showToast("Загружен пример конфига");
+        }}
+      />
 
       {/* toast */}
       {toast && (
