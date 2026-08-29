@@ -280,7 +280,7 @@ export default function Diagnostics({ analysis, loading, filter, onFilter, onJum
 
       {/* footer */}
       <div className="border-t border-line px-4 py-2.5 text-[10.5px] text-dim">
-        Клик по находке ведёт к строке кода · 31 правило анализа yuck, scss и include-графов
+        Клик по находке ведёт к строке кода · 33 правила анализа yuck, scss и include-графов
       </div>
     </div>
   );
