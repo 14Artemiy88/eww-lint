@@ -47,14 +47,21 @@ export interface Analysis {
 const lineOf = (src: string, idx: number) =>
   src.slice(0, idx).split("\n").length;
 
+/**
+ * Разбор :interval ровно как это делает eww (crates/simplexpr/src/dynval.rs,
+ * `as_duration`): единицы ms, s, m/min, h; для s/m/h допустимы дроби
+ * («0.1s», «0.5h»); число без суффикса — миллисекунды. Возвращает секунды.
+ */
 const parseInterval = (raw: string): number | null => {
-  const m = raw.trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|m)?$/);
+  const m = raw.trim().match(/^(\d+(?:\.\d+)?)\s*(ms|s|min|m|h)?$/);
   if (!m) return null;
   const v = parseFloat(m[1]);
-  const unit = m[2] ?? "s";
+  const unit = m[2] ?? "";
   if (unit === "ms") return v / 1000;
-  if (unit === "m") return v * 60;
-  return v;
+  if (unit === "s") return v;
+  if (unit === "m" || unit === "min") return v * 60;
+  if (unit === "h") return v * 3600;
+  return v / 1000; /* число без суффикса — миллисекунды */
 };
 
 /** Находит закрывающую скобку s-выражения, открытого в openIdx. */
@@ -238,7 +245,8 @@ const analyzeYuck = (
           severity: "error",
           tag: "синтаксис",
           title: `Не удалось разобрать интервал «${intMatch[1]}»`,
-          detail: "Поддерживаются форматы \"500ms\", \"1s\", \"5m\". Проверьте значение :interval.",
+          detail:
+            "eww принимает единицы ms, s, m/min и h (для s/m/h — с дробной частью: \"0.1s\", \"0.5h\"), либо просто число миллисекунд. Проверьте значение :interval.",
         });
         continue;
       }
