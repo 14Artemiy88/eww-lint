@@ -29,8 +29,13 @@ const forceNoColor = () => (COLOR = false);
 
 const A = {
   reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m", inv: "\x1b[7m",
-  red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m",
-  cyan: "\x1b[36m", gray: "\x1b[90m",
+  /* яркие варианты (9x) — читаемы на тёмных темах терминала */
+  red: "\x1b[91m", green: "\x1b[92m", yellow: "\x1b[93m",
+  cyan: "\x1b[96m",
+  /* вспомогательный текст: 245 (#8a8a8a) — видно даже на чисто чёрном фоне;
+     90 (bright black) на многих темах почти неразличим */
+  gray: "\x1b[38;5;245m",
+  mut: "\x1b[38;5;250m",
 };
 const paint = (code, s) => (COLOR ? code + s + A.reset : s);
 const strip = (s) => s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -558,7 +563,7 @@ const analyzeProject = (files, scssFile) => {
   const score = diagnostics.length === 0 ? 100 : Math.max(4, 100 - penalty);
   const grade = score >= 85 ? "отлично" : score >= 65 ? "хорошо" : score >= 40 ? "средне" : "требует работы";
 
-  return { diagnostics, score, grade, stats, rootPath };
+  return { diagnostics, score, grade, stats, rootPath, files };
 };
 
 /* ────────────────────────────────────────────────────────────
