@@ -45,11 +45,28 @@ const pad = (s, w) => {
   const d = w - visLen(s);
   return d > 0 ? s + " ".repeat(d) : s;
 };
+/* режем по ВИДИМОЙ ширине, сохраняя ANSI-коды: иначе цвет теряется,
+   а куски строк «склеиваются» при перезаписи кадра */
 const truncate = (s, w) => {
+  if (w <= 1) return "";
   if (visLen(s) <= w) return s;
-  // режем по видимой длине, сохраняя esc-последовательности простыми:
-  const plain = strip(s);
-  return plain.slice(0, Math.max(1, w - 1)) + "…";
+  let outStr = "";
+  let vis = 0;
+  let i = 0;
+  while (i < s.length && vis < w - 1) {
+    if (s[i] === "\x1b") {
+      const m = /^\x1b\[[0-9;]*m/.exec(s.slice(i));
+      if (m) {
+        outStr += m[0];
+        i += m[0].length;
+        continue;
+      }
+    }
+    outStr += s[i];
+    vis++;
+    i++;
+  }
+  return outStr + "…" + (COLOR ? A.reset : "");
 };
 
 /* ────────────────────────────────────────────────────────────
@@ -782,7 +799,7 @@ const render = () => {
     const sym = sevColor(d.severity, SEV_SYM[d.severity]);
     const loc = paint(A.gray, `${d.file}:${d.line}`);
     const title = sel ? paint(A.inv, " " + truncate(d.title, diagW - 14)) : " " + truncate(d.title, diagW - 14);
-    dLines.push(` ${sym} ${pad(loc, 26).slice(0, 40)}${title}`);
+    dLines.push(` ${sym} ${pad(truncate(loc, 24), 24)}${title}`);
   }
   if (diags.length === 0) dLines.push(paint(A.green, "  ✔ пусто — находок нет"));
   while (dLines.length < listH + 1) dLines.push("");
@@ -821,7 +838,9 @@ const render = () => {
   out.push(paint(A.gray, bar(cols)));
   out.push(pad(footer, cols));
 
-  process.stdout.write("\x1b[H" + out.slice(0, rows).map((l) => truncate(l, cols)).join("\r\n") + "\x1b[0m\r\n");
+  /* \x1b[J чистит экран от курсора вниз: без этого хвосты прежних,
+     более длинных строк остаются и «приклеиваются» к новым */
+  process.stdout.write("\x1b[H\x1b[J" + out.slice(0, rows).map((l) => truncate(l, cols)).join("\r\n") + "\x1b[0m");
 };
 
 const rescan = () => {
