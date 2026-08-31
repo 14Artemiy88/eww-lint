@@ -1,92 +1,62 @@
 @import "tailwindcss";
 
 @theme {
-  --font-display: "Unbounded", system-ui, sans-serif;
-  --font-body: "Manrope", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, monospace;
+  --font-display: "Russo One", system-ui, sans-serif;
+  --font-body: "JetBrains Mono", ui-monospace, monospace;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --color-ink: #0d1219;
-  --color-panel: #121a25;
-  --color-raised: #182231;
-  --color-hover: #1e2b3e;
-  --color-line: #223146;
-  --color-line2: #31455e;
-  --color-fg: #e7eef7;
-  --color-mut: #8da3ba;
-  --color-dim: #5c7189;
+  --color-ink: #0a0f0c;
+  --color-panel: #0f1712;
+  --color-raised: #15211a;
+  --color-hover: #1a2b20;
+  --color-line: #203527;
+  --color-line2: #33523d;
+  --color-fg: #d8ead9;
+  --color-mut: #93b29a;
+  --color-dim: #5f7d68;
 
-  --color-amber: #f2b04e;
-  --color-amber2: #ffcf7d;
-  --color-mint: #55d6a0;
-  --color-coral: #ff7b72;
-  --color-sky: #6fb7ff;
-  --color-viol: #c9a6ff;
+  --color-amber: #f5b855;
+  --color-amber2: #ffd07e;
+  --color-mint: #4ce07f;
+  --color-coral: #ff7a6b;
+  --color-sky: #5ec8ff;
+  --color-viol: #c0a8ff;
 
   --animate-fade-up: fade-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-toast-in: toast-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-shimmer: shimmer 1.4s linear infinite;
   --animate-drift-a: drift-a 26s ease-in-out infinite alternate;
   --animate-drift-b: drift-b 32s ease-in-out infinite alternate;
-  --animate-blink-dot: blink-dot 2.4s ease-in-out infinite;
+  --animate-blink-dot: blink-dot 1.1s steps(2, start) infinite;
 }
 
 @keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(14px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes shimmer {
-  from {
-    background-position: -400px 0;
-  }
-  to {
-    background-position: 400px 0;
-  }
+  from { background-position: -400px 0; }
+  to { background-position: 400px 0; }
 }
 
 @keyframes drift-a {
-  from {
-    transform: translate3d(-4%, -2%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(5%, 4%, 0) scale(1.15);
-  }
+  from { transform: translate3d(-4%, -2%, 0) scale(1); }
+  to { transform: translate3d(5%, 4%, 0) scale(1.15); }
 }
 
 @keyframes drift-b {
-  from {
-    transform: translate3d(3%, 3%, 0) scale(1.1);
-  }
-  to {
-    transform: translate3d(-5%, -4%, 0) scale(0.95);
-  }
+  from { transform: translate3d(3%, 3%, 0) scale(1.1); }
+  to { transform: translate3d(-5%, -4%, 0) scale(0.95); }
 }
 
 @keyframes blink-dot {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
+  50% { opacity: 0; }
 }
 
 html {
@@ -98,26 +68,61 @@ body {
   background-color: var(--color-ink);
   color: var(--color-fg);
   -webkit-font-smoothing: antialiased;
+  font-size: 13px;
 }
 
 ::selection {
-  background: rgba(242, 176, 78, 0.28);
-  color: #fff3dd;
+  background: rgba(76, 224, 127, 0.3);
+  color: #eaffef;
 }
 
-/* ---------- ambient background ---------- */
+/* острые углы — как в настоящем TUI */
+.rounded-xl { border-radius: 4px; }
+.rounded-lg { border-radius: 3px; }
+.rounded-md { border-radius: 2px; }
+
+/* ---------- фон: фосфорная сетка + CRT ---------- */
 .bg-stage {
   background-image:
-    linear-gradient(rgba(111, 183, 255, 0.033) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(111, 183, 255, 0.033) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse 120% 90% at 50% 0%, black 30%, transparent 78%);
+    linear-gradient(rgba(76, 224, 127, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(76, 224, 127, 0.035) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(ellipse 130% 95% at 50% 0%, black 25%, transparent 80%);
 }
 
-/* ---------- editor ---------- */
+.scanlines {
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.11) 0px,
+    rgba(0, 0, 0, 0.11) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+.crt-glow {
+  background: radial-gradient(ellipse 90% 70% at 50% 30%, rgba(76, 224, 127, 0.05), transparent 70%);
+}
+
+/* ---------- клавиши-подсказки ---------- */
+.keycap {
+  display: inline-block;
+  border: 1px solid var(--color-line2);
+  border-bottom-width: 2px;
+  background: var(--color-raised);
+  color: var(--color-mut);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ---------- редактор ---------- */
 .editor-textarea {
   color: transparent;
-  caret-color: #f2b04e;
+  caret-color: #4ce07f;
   background: transparent;
   resize: none;
   outline: none;
@@ -128,7 +133,7 @@ body {
 }
 
 .editor-textarea::placeholder {
-  color: rgba(92, 113, 137, 0.7);
+  color: rgba(95, 125, 104, 0.75);
 }
 
 .editor-pre,
@@ -144,62 +149,34 @@ body {
   overflow: hidden;
 }
 
-.tk-comment {
-  color: #51637a;
-  font-style: italic;
-}
-.tk-string {
-  color: #9ece8f;
-}
-.tk-keyword {
-  color: #f2b04e;
-  font-weight: 700;
-}
-.tk-prop {
-  color: #6fb7ff;
-}
-.tk-punct {
-  color: #5d7189;
-}
-.tk-var {
-  color: #c9a6ff;
-}
-.tk-hex {
-  color: #55d6a0;
-}
-.tk-fn {
-  color: #8da3ba;
-}
-.tk-at {
-  color: #ff9d68;
-  font-weight: 500;
-}
-.tk-pseudo {
-  color: #6fb7ff;
-}
+.tk-comment { color: #4f6b57; font-style: italic; }
+.tk-string { color: #9ece8f; }
+.tk-keyword { color: #f5b855; font-weight: 700; }
+.tk-prop { color: #5ec8ff; }
+.tk-punct { color: #587763; }
+.tk-var { color: #c0a8ff; }
+.tk-hex { color: #4ce07f; }
+.tk-fn { color: #93b29a; }
+.tk-at { color: #ff9d68; font-weight: 500; }
+.tk-pseudo { color: #5ec8ff; }
 
-/* ---------- scrollbars ---------- */
-.scroll-slim::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
+/* ---------- скроллбары ---------- */
+.scroll-slim::-webkit-scrollbar { width: 10px; height: 10px; }
 .scroll-slim::-webkit-scrollbar-thumb {
-  background: #2b3c53;
+  background: #2b4433;
   border-radius: 8px;
   border: 3px solid transparent;
   background-clip: content-box;
 }
 .scroll-slim::-webkit-scrollbar-thumb:hover {
-  background: #3c5373;
+  background: #3c5f47;
   border: 3px solid transparent;
   background-clip: content-box;
 }
-.scroll-slim::-webkit-scrollbar-corner {
-  background: transparent;
-}
+.scroll-slim::-webkit-scrollbar-corner { background: transparent; }
 
 .skeleton {
-  background: linear-gradient(90deg, #182231 0%, #22314a 40%, #182231 80%);
+  background: linear-gradient(90deg, #15211a 0%, #1f3326 40%, #15211a 80%);
   background-size: 800px 100%;
   animation: var(--animate-shimmer);
 }
