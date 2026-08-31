@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeEditor, { type EditorApi } from "./components/CodeEditor";
 import HelpModal from "./components/HelpModal";
+import TuiModal from "./components/TuiModal";
 import ScoreDial from "./components/ScoreDial";
 import Diagnostics, { type Filter } from "./components/Diagnostics";
 import { analyze, type Analysis, type Diagnostic, type FileKind, type MountedFile } from "./lib/analyzer";
@@ -71,6 +72,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [tuiOpen, setTuiOpen] = useState(false);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pastePath, setPastePath] = useState("");
   const [pasteContent, setPasteContent] = useState("");
@@ -365,44 +367,53 @@ export default function App() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden xl:h-screen">
-      {/* ambient background */}
+      {/* ambient background: фосфорное свечение + CRT-сканлайны */}
       <div className="pointer-events-none fixed inset-0 z-0">
         <div className="bg-stage absolute inset-0" />
+        <div className="crt-glow absolute inset-0" />
         <div
-          className="animate-drift-a absolute -top-40 -right-32 h-[520px] w-[520px] rounded-full opacity-[0.13]"
-          style={{ background: "radial-gradient(circle, #55d6a0 0%, transparent 62%)", filter: "blur(60px)" }}
+          className="animate-drift-a absolute -top-40 -right-32 h-[520px] w-[520px] rounded-full opacity-[0.10]"
+          style={{ background: "radial-gradient(circle, #4ce07f 0%, transparent 62%)", filter: "blur(70px)" }}
         />
         <div
-          className="animate-drift-b absolute -bottom-48 -left-32 h-[560px] w-[560px] rounded-full opacity-[0.11]"
-          style={{ background: "radial-gradient(circle, #f2b04e 0%, transparent 62%)", filter: "blur(60px)" }}
+          className="animate-drift-b absolute -bottom-48 -left-32 h-[560px] w-[560px] rounded-full opacity-[0.07]"
+          style={{ background: "radial-gradient(circle, #f5b855 0%, transparent 62%)", filter: "blur(70px)" }}
         />
-        <div
-          className="absolute top-1/3 left-1/2 h-[380px] w-[620px] -translate-x-1/2 rounded-full opacity-[0.05]"
-          style={{ background: "radial-gradient(circle, #6fb7ff 0%, transparent 65%)", filter: "blur(70px)" }}
-        />
+        <div className="scanlines absolute inset-0 opacity-60" />
       </div>
 
       {/* header */}
       <header className="relative z-10 border-b border-line bg-ink/70 backdrop-blur-sm">
         <div className="mx-auto flex max-w-[1560px] items-center gap-4 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <svg viewBox="0 0 32 32" className="h-9 w-9">
-              <rect x="1.5" y="1.5" width="29" height="29" rx="8" fill="#182231" stroke="#f2b04e" strokeWidth="1.6" />
-              <path d="M11.5 9.5c-3.2 2.2-3.2 10.8 0 13" fill="none" stroke="#e7eef7" strokeWidth="1.9" strokeLinecap="round" />
-              <path d="M20.5 9.5c3.2 2.2 3.2 10.8 0 13" fill="none" stroke="#e7eef7" strokeWidth="1.9" strokeLinecap="round" />
-              <circle cx="16" cy="16" r="2.1" fill="#55d6a0" />
-            </svg>
+            <div className="flex h-10 w-10 items-center justify-center border border-mint/50 bg-mint/10 font-display text-lg text-mint shadow-[0_0_18px_rgba(76,224,127,0.25)]">
+              ▚
+            </div>
             <div className="leading-tight">
               <div className="font-display text-[17px] font-black tracking-tight text-fg">
-                eww<span className="text-amber">·</span>lint
+                eww<span className="text-mint">·</span>lint
+                <span className="ml-2 border border-line2 px-1.5 py-0.5 align-middle font-mono text-[9.5px] font-semibold text-dim">
+                  v1.0 tui
+                </span>
               </div>
-              <div className="text-[10.5px] font-medium tracking-wide text-dim">
-                анализ и оптимизация конфигов ElKowars Wacky Widgets
+              <div className="font-mono text-[10.5px] text-dim">
+                $ node eww-lint.tui.mjs ~/.config/eww
+                <span className="animate-blink-dot ml-1 inline-block text-mint">▊</span>
               </div>
             </div>
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            <button
+              onClick={() => setTuiOpen(true)}
+              title="Скачать TUI-версию: читает ~/.config/eww напрямую"
+              className="flex items-center gap-2 border border-mint/60 bg-mint/10 px-3 py-2 font-mono text-[12px] font-bold text-mint transition-all duration-200 hover:bg-mint/20 active:scale-95"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 7l4 5-4 5M11 19h9" />
+              </svg>
+              TUI
+            </button>
             <button
               onClick={() => setHelpOpen(true)}
               title="Как пользоваться"
@@ -717,6 +728,27 @@ export default function App() {
         </div>
       )}
 
+      {/* status bar */}
+      <footer className="relative z-10 mt-auto border-t border-line bg-panel/80">
+        <div className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2 font-mono text-[10.5px] text-dim sm:px-6">
+          <span className="flex items-center gap-1.5">
+            <span className="keycap">ctrl+⏎</span> проверить
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="keycap">папка</span> импорт ~/.config/eww
+          </span>
+          <button
+            onClick={() => setTuiOpen(true)}
+            className="flex items-center gap-1.5 transition-colors hover:text-mint"
+          >
+            <span className="keycap">TUI</span> нативная версия — прямой доступ к диску
+          </button>
+          <span className="ml-auto hidden items-center gap-1.5 sm:flex">
+            eww·lint v1.0 · 33 правила · node ≥ 18 · 0 зависимостей
+          </span>
+        </div>
+      </footer>
+
       {/* help */}
       <HelpModal
         open={helpOpen}
@@ -727,6 +759,14 @@ export default function App() {
           setTab("yuck");
           showToast("Загружен пример конфига");
         }}
+      />
+
+      {/* tui modal */}
+      <TuiModal
+        open={tuiOpen}
+        onClose={() => setTuiOpen(false)}
+        onCopy={onCopy}
+        onDownloaded={(msg) => showToast(msg)}
       />
 
       {/* toast */}
